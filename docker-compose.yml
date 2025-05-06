@@ -1,0 +1,26 @@
+services:
+  ncat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - API_KEY=${API_KEY} # Required for authentication
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL} # Optional: for S3-compatible storage
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      # Add other optional variables (e.g., GCP_CREDENTIALS, GDRIVE_TOKEN) as needed
+    volumes:
+      - storage:/var/www/html/storage/app
+      - logs:/var/www/html/storage/logs
+    restart: unless-stopped
+    expose:
+      - "8080" # Expose port for Coolify’s proxy
+
+volumes:
+  storage:
+    driver: local
+  logs:
+    driver: local
