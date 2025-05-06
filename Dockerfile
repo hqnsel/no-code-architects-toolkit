@@ -72,7 +72,7 @@ RUN git clone https://gitlab.com/AOMediaCodec/SVT-AV1.git && \
 RUN git clone https://github.com/xiph/rav1e.git && \
     cd rav1e && \
     cargo install cargo-c && \
-    ./build.sh && \
+    cargo cbuild --release && \
     cargo cinstall --prefix=/usr/local && \
     cd .. && rm -rf rav1e
 
