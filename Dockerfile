@@ -76,13 +76,15 @@ RUN git clone https://github.com/xiph/rav1e.git && \
     cargo cinstall --prefix=/usr/local && \
     cd .. && rm -rf rav1e
 
-# Install zimg from source
+# Install zimg from source with submodule initialization
 RUN git clone https://github.com/sekrit-twc/zimg.git && \
     cd zimg && \
+    git submodule update --init --recursive && \
     ./autogen.sh && \
     ./configure && \
     make -j$(nproc) && \
     make install && \
+    ldconfig && \
     cd .. && rm -rf zimg
 
 # Install libvmaf from source
