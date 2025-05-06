@@ -1,5 +1,5 @@
-# Base image
-FROM python:3.9-slim
+# Use an ARM64 base image
+FROM python:3.9-slim-bullseye@sha256:arm64v8 # Ensure ARM64 base image
 
 # Install system dependencies, build tools, and libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libharfbuzz-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install SRT from source (latest version using cmake)
+# Install SRT from source
 RUN git clone https://github.com/Haivision/srt.git && \
     cd srt && \
     mkdir build && cd build && \
@@ -57,7 +57,7 @@ RUN git clone https://gitlab.com/AOMediaCodec/SVT-AV1.git && \
     cd SVT-AV1 && \
     git checkout v0.9.0 && \
     cd Build && \
-    cmake .. && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j$(nproc) && \
     make install && \
     cd ../.. && rm -rf SVT-AV1
@@ -69,9 +69,9 @@ RUN git clone https://github.com/Netflix/vmaf.git && \
     ninja -C build && \
     ninja -C build install && \
     cd ../.. && rm -rf vmaf && \
-    ldconfig  # Update the dynamic linker cache
+    ldconfig
 
-# Manually build and install fdk-aac (since it is not available via apt-get)
+# Install fdk-aac from source
 RUN git clone https://github.com/mstorsjo/fdk-aac && \
     cd fdk-aac && \
     autoreconf -fiv && \
@@ -80,7 +80,7 @@ RUN git clone https://github.com/mstorsjo/fdk-aac && \
     make install && \
     cd .. && rm -rf fdk-aac
 
-# Install libunibreak (required for ASS_FEATURE_WRAP_UNICODE)
+# Install libunibreak
 RUN git clone https://github.com/adah1972/libunibreak.git && \
     cd libunibreak && \
     ./autogen.sh && \
@@ -90,24 +90,23 @@ RUN git clone https://github.com/adah1972/libunibreak.git && \
     ldconfig && \
     cd .. && rm -rf libunibreak
 
-# Build and install libass with libunibreak support and ASS_FEATURE_WRAP_UNICODE enabled
+# Install libass with libunibreak support
 RUN git clone https://github.com/libass/libass.git && \
     cd libass && \
     autoreconf -i && \
-    ./configure --enable-libunibreak || { cat config.log; exit 1; } && \
-    mkdir -p /app && echo "Config log located at: /app/config.log" && cp config.log /app/config.log && \
-    make -j$(nproc) || { echo "Libass build failed"; exit 1; } && \
+    ./configure --enable-libunibreak && \
+    make -j$(nproc) && \
     make install && \
     ldconfig && \
     cd .. && rm -rf libass
 
-# Build and install FFmpeg with all required features
+# Build and install FFmpeg with ARM optimizations
 RUN git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg && \
     cd ffmpeg && \
     git checkout n7.0.2 && \
-    PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig" \
-    CFLAGS="-I/usr/include/freetype2" \
-    LDFLAGS="-L/usr/lib/x86_64-linux-gnu" \
+    PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" \
+    CFLAGS="-I/usr/include/freetype2 -march=armv8-a" \
+    LDFLAGS="-L/usr/local/lib" \
     ./configure --prefix=/usr/local \
         --enable-gpl \
         --enable-pthreads \
@@ -133,60 +132,62 @@ RUN git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg && \
         --enable-fontconfig \
         --enable-libsrt \
         --enable-filter=drawtext \
-        --extra-cflags="-I/usr/include/freetype2 -I/usr/include/libpng16 -I/usr/include" \
-        --extra-ldflags="-L/usr/lib/x86_64-linux-gnu -lfreetype -lfontconfig" \
+        --extra-cflags="-I/usr/include/freetype2 -I/usr/include/libpng16 -march=armv8-a" \
+        --extra-ldflags="-L/usr/local/lib" \
         --enable-gnutls \
     && make -j$(nproc) && \
     make install && \
     cd .. && rm -rf ffmpeg
 
-# Add /usr/local/bin to PATH (if not already included)
+# Add /usr/local/bin to PATH
 ENV PATH="/usr/local/bin:${PATH}"
 
-# Copy fonts into the custom fonts directory
+# Copy fonts
 COPY ./fonts /usr/share/fonts/custom
 
-# Rebuild the font cache so that fontconfig can see the custom fonts
+# Rebuild font cache
 RUN fc-cache -f -v
 
 # Set work directory
 WORKDIR /app
 
-# Set environment variable for Whisper cache
+# Set Whisper cache directory
 ENV WHISPER_CACHE_DIR="/app/whisper_cache"
 
-# Create cache directory (no need for chown here yet)
-RUN mkdir -p ${WHISPER_CACHE_DIR} 
+# Create cache directory
+RUN mkdir -p ${WHISPER_CACHE_DIR}
 
-# Copy the requirements file first to optimize caching
+# Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies, upgrade pip 
+# Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install openai-whisper && \
-    pip install jsonschema 
+    pip install jsonschema
 
-# Create the appuser 
-RUN useradd -m appuser 
+# Create appuser
+RUN useradd -m appuser
 
-# Give appuser ownership of the /app directory (including whisper_cache)
-RUN chown appuser:appuser /app 
+# Set ownership
+RUN chown appuser:appuser /app
 
-# Important: Switch to the appuser before downloading the model
+# Switch to appuser
 USER appuser
 
+# Download Whisper model
 RUN python -c "import os; print(os.environ.get('WHISPER_CACHE_DIR')); import whisper; whisper.load_model('base')"
 
-# Copy the rest of the application code
+# Copy application code
 COPY . .
 
-# Expose the port the app runs on
+# Expose port
 EXPOSE 8080
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
+# Create and set permissions for Gunicorn script
 RUN echo '#!/bin/bash\n\
 gunicorn --bind 0.0.0.0:8080 \
     --workers ${GUNICORN_WORKERS:-2} \
@@ -196,5 +197,5 @@ gunicorn --bind 0.0.0.0:8080 \
     app:app' > /app/run_gunicorn.sh && \
     chmod +x /app/run_gunicorn.sh
 
-# Run the shell script
+# Run Gunicorn
 CMD ["/app/run_gunicorn.sh"]
