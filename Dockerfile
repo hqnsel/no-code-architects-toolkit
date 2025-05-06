@@ -1,5 +1,6 @@
 # Use an ARM64 base image
 FROM --platform=linux/arm64 python:3.9-slim-bullseye
+
 # Install system dependencies, build tools, and libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -29,9 +30,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgnutls28-dev \
     libaom-dev \
     libdav1d-dev \
-    librav1e-dev \
-    libsvtav1-dev \
-    libzimg-dev \
     libwebp-dev \
     git \
     pkg-config \
@@ -60,6 +58,23 @@ RUN git clone https://gitlab.com/AOMediaCodec/SVT-AV1.git && \
     make -j$(nproc) && \
     make install && \
     cd ../.. && rm -rf SVT-AV1
+
+# Install rav1e from source
+RUN git clone https://github.com/xiph/rav1e.git && \
+    cd rav1e && \
+    cargo install cargo-c && \
+    ./build.sh && \
+    cargo cinstall --prefix=/usr/local && \
+    cd .. && rm -rf rav1e
+
+# Install zimg from source
+RUN git clone https://github.com/sekrit-twc/zimg.git && \
+    cd zimg && \
+    ./autogen.sh && \
+    ./configure && \
+    make -j$(nproc) && \
+    make install && \
+    cd .. && rm -rf zimg
 
 # Install libvmaf from source
 RUN git clone https://github.com/Netflix/vmaf.git && \
@@ -140,6 +155,11 @@ RUN git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg && \
 
 # Add /usr/local/bin to PATH
 ENV PATH="/usr/local/bin:${PATH}"
+
+# Install Rust for rav1e build
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    . $HOME/.cargo/env && \
+    rustup default stable
 
 # Copy fonts
 COPY ./fonts /usr/share/fonts/custom
