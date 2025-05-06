@@ -1,6 +1,5 @@
 # Use an ARM64 base image
-FROM python:3.9-slim-bullseye@sha256:arm64v8 # Ensure ARM64 base image
-
+FROM --platform=linux/arm64 python:3.9-slim-bullseye
 # Install system dependencies, build tools, and libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
