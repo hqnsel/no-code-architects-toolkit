@@ -38,7 +38,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtool \
     libfribidi-dev \
     libharfbuzz-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Rust for rav1e build
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    . $HOME/.cargo/env && \
+    rustup default stable
+
+# Ensure cargo is in PATH
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install SRT from source
 RUN git clone https://github.com/Haivision/srt.git && \
@@ -155,11 +164,6 @@ RUN git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg && \
 
 # Add /usr/local/bin to PATH
 ENV PATH="/usr/local/bin:${PATH}"
-
-# Install Rust for rav1e build
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
-    . $HOME/.cargo/env && \
-    rustup default stable
 
 # Copy fonts
 COPY ./fonts /usr/share/fonts/custom
